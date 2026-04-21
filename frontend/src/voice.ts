@@ -1,4 +1,4 @@
-﻿export interface VoiceInput {
+export interface VoiceInput {
   start(): void;
   stop(): void;
   pause(): void;
@@ -44,7 +44,9 @@ export function createAudioPlayer(): AudioPlayer {
     source.buffer = buffer;
     source.connect(analyser!);
     currentSource = source;
-    source.onended = () => { if (currentSource === source) playNext(); };
+    source.onended = () => {
+      if (currentSource === source) playNext();
+    };
     source.start();
   }
 
@@ -66,10 +68,24 @@ export function createAudioPlayer(): AudioPlayer {
     },
     stop() {
       queue = [];
-      if (currentSource) { try { currentSource.stop(); } catch {} currentSource = null; }
+      if (currentSource) {
+        try { currentSource.stop(); } catch {}
+        currentSource = null;
+      }
       isPlaying = false;
     },
-    getAnalyser() { return analyser || { connect: () => {}, disconnect: () => {} } as AnalyserNode; },
+    getAnalyser() {
+      if (!analyser) {
+        // Dummy analyser that won't crash the orb
+        return {
+          getByteFrequencyData: () => {},
+          connect: () => {},
+          disconnect: () => {},
+          frequencyBinCount: 0,
+        } as unknown as AnalyserNode;
+      }
+      return analyser;
+    },
     onFinished(cb: () => void) { finishedCallback = cb; },
   };
 }
@@ -80,11 +96,9 @@ export function createVoiceInput(
 ): VoiceInput {
   const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   let recognition: any = null;
-  let wakeWordRecognition: any = null;
   let isActive = false;
   let isPaused = false;
-  let isStarting = false;
-  let mediaStream: MediaStream | null = null;
+  let isStarted = false;
 
   if (!SR) {
     onError("Speech recognition not supported");
@@ -96,11 +110,24 @@ export function createVoiceInput(
   recognition.interimResults = true;
   recognition.lang = "en-US";
 
+  recognition.onstart = () => { isStarted = true; };
+  recognition.onend = () => {
+    isStarted = false;
+    if (isActive && !isPaused) {
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error("[mic] restart failed:", e);
+      }
+    }
+  };
   recognition.onresult = (event: any) => {
     if (isPaused) return;
     let finalText = "";
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalText += event.results[i][0].transcript;
+      }
     }
     if (finalText && isActive && !isPaused) {
       console.log("[mic]", finalText);
@@ -109,75 +136,58 @@ export function createVoiceInput(
   };
 
   recognition.onerror = (event: any) => {
-    if (event.error === "not-allowed") onError("Microphone access denied");
-    else if (event.error !== "no-speech") console.warn("[mic] error:", event.error);
-  };
-
-  recognition.onend = () => {
-    if (isActive && !isPaused && !isStarting && mediaStream) {
-      try { recognition.start(); } catch {}
+    if (event.error === "not-allowed") {
+      onError("Microphone access denied");
+    } else if (event.error !== "no-speech") {
+      console.warn("[mic] error:", event.error);
     }
   };
 
-  wakeWordRecognition = new SR();
-  wakeWordRecognition.continuous = true;
-  wakeWordRecognition.interimResults = true;
-  wakeWordRecognition.lang = "en-US";
-  wakeWordRecognition.onresult = (event: any) => {
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        const text = event.results[i][0].transcript.toLowerCase();
-        if (text.includes("jarvis")) {
-          console.log("[wake-word] JARVIS detected");
-          onTranscript(text);
-        }
-      }
-    }
-  };
-  wakeWordRecognition.onend = () => {
-    if (isActive && mediaStream) try { wakeWordRecognition.start(); } catch {}
-  };
 
   async function start() {
-    if (isStarting) return;
-    isStarting = true;
+    if (!recognition) return;
+    if (isActive) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStream = stream;
-      try { recognition.start(); } catch {}
-      try { wakeWordRecognition.start(); } catch {}
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!isStarted) recognition.start();
       isActive = true;
       isPaused = false;
       console.log("[mic] started");
-    } catch (err: any) {
-      console.error("[mic] error:", err);
-      if (err.name === "NotFoundError") onError("No microphone found. Please connect a microphone.");
-      else if (err.name === "NotAllowedError") onError("Microphone access denied.");
-      else onError(`Microphone error: ${err.message}`);
-      isActive = false;
-    } finally {
-      isStarting = false;
+    } catch (err) {
+      onError("Could not access microphone");
     }
   }
 
   function stop() {
-    if (recognition) try { recognition.stop(); } catch {}
-    if (wakeWordRecognition) try { wakeWordRecognition.stop(); } catch {}
-    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (recognition) {
+      try { recognition.stop(); } catch {}
+    }
     isActive = false;
   }
 
   function pause() {
-    if (recognition) try { recognition.stop(); } catch {}
+    if (recognition) {
+      try { recognition.stop(); } catch {}
+    }
     isPaused = true;
+    console.log("[mic] paused");
   }
+
   function resume() {
-    if (recognition && isActive && mediaStream) try { recognition.start(); } catch {}
+    if (!recognition) return;
+    if (!isActive) return;
+    if (!isPaused) return;
+    try {
+      if (!isStarted) recognition.start();
+      console.log("[mic] resumed");
+    } catch (e) {
+      console.warn("[mic] resume failed", e);
+    }
     isPaused = false;
   }
+
   function pauseForWakeWord() {
-    if (recognition) try { recognition.stop(); } catch {}
-    isPaused = true;
+    pause();
   }
 
   return { start, stop, pause, resume, pauseForWakeWord };

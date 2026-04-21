@@ -19,7 +19,7 @@ interface StatusResponse {
   server_port: number;
   uptime_seconds: number;
   env_keys_set: {
-    anthropic: boolean;
+    groq: boolean;
     fish_audio: boolean;
     fish_voice_id: boolean;
     user_name: string;
@@ -73,7 +73,7 @@ function buildPanelHTML(): string {
       </div>
 
       <div class="settings-welcome" id="settings-welcome" style="display:none">
-        <p>Welcome to JARVIS. Let's get you set up.</p>
+        <p>Welcome to JARVIS. Let's configure your digital presence.</p>
       </div>
 
       <div class="settings-body">
@@ -83,11 +83,11 @@ function buildPanelHTML(): string {
           <h3>API Keys</h3>
 
           <div class="settings-field">
-            <label>Anthropic API Key</label>
+            <label>Groq API Key (AI Intelligence)</label>
             <div class="settings-input-row">
-              <input type="password" id="input-anthropic-key" placeholder="sk-ant-..." />
-              <button class="settings-btn" id="btn-test-anthropic">Test</button>
-              <span class="status-dot" id="status-anthropic"></span>
+                <input type="password" id="input-groq-key" placeholder="gsk_..." />
+                <button class="settings-btn" id="btn-test-groq">Test</button>
+                <span class="status-dot" id="status-groq"></span>
             </div>
           </div>
 
@@ -117,7 +117,7 @@ function buildPanelHTML(): string {
         <section class="settings-section" id="section-status">
           <h3>Connection Status</h3>
           <div class="status-grid">
-            <div class="status-row"><span class="status-dot" id="status-claude-cli"></span><span>Claude Code CLI</span></div>
+            <div class="status-row"><span class="status-dot" id="status-groq-node"></span><span>Groq Intelligence</span></div>
             <div class="status-row"><span class="status-dot" id="status-calendar"></span><span>Apple Calendar</span></div>
             <div class="status-row"><span class="status-dot" id="status-mail"></span><span>Apple Mail</span></div>
             <div class="status-row"><span class="status-dot" id="status-notes"></span><span>Apple Notes</span></div>
@@ -205,7 +205,7 @@ async function loadStatus() {
   try {
     const status = await apiGet<StatusResponse>("/api/settings/status");
 
-    setDotStatus("status-claude-cli", status.claude_code_installed ? "green" : "red");
+    setDotStatus("status-groq-node", status.claude_code_installed ? "green" : "red");
     setDotStatus("status-calendar", status.calendar_accessible ? "green" : "red");
     setDotStatus("status-mail", status.mail_accessible ? "green" : "red");
     setDotStatus("status-notes", status.notes_accessible ? "green" : "red");
@@ -215,7 +215,7 @@ async function loadStatus() {
     if (serverDetail) serverDetail.textContent = `port ${status.server_port} | up ${formatUptime(status.uptime_seconds)}`;
 
     // API key status dots
-    setDotStatus("status-anthropic", status.env_keys_set.anthropic ? "green" : "red");
+    setDotStatus("status-groq", status.env_keys_set.groq ? "green" : "red");
     setDotStatus("status-fish", status.env_keys_set.fish_audio ? "green" : "red");
 
     // System info
@@ -257,11 +257,10 @@ function wireEvents() {
 
   // Save keys
   document.getElementById("btn-save-keys")?.addEventListener("click", async () => {
-    const anthropicKey = (document.getElementById("input-anthropic-key") as HTMLInputElement).value.trim();
-    const fishKey = (document.getElementById("input-fish-key") as HTMLInputElement).value.trim();
+    const groqKey = (document.getElementById("input-groq-key") as HTMLInputElement).value.trim();
 
-    if (anthropicKey) {
-      await apiPost("/api/settings/keys", { key_name: "ANTHROPIC_API_KEY", key_value: anthropicKey });
+    if (groqKey) {
+      await apiPost("/api/settings/keys", { key_name: "GROQ_API_KEY", key_value: groqKey });
     }
     if (fishKey) {
       await apiPost("/api/settings/keys", { key_name: "FISH_API_KEY", key_value: fishKey });
@@ -277,15 +276,15 @@ function wireEvents() {
     }
   });
 
-  // Test Anthropic
-  document.getElementById("btn-test-anthropic")?.addEventListener("click", async () => {
-    setDotStatus("status-anthropic", "yellow");
-    const key = (document.getElementById("input-anthropic-key") as HTMLInputElement).value.trim();
+  // Test Groq
+  document.getElementById("btn-test-groq")?.addEventListener("click", async () => {
+    setDotStatus("status-groq", "yellow");
+    const key = (document.getElementById("input-groq-key") as HTMLInputElement).value.trim();
     try {
       const result = await apiPost<{ valid: boolean; error?: string }>("/api/settings/test-anthropic", { key_value: key || undefined });
-      setDotStatus("status-anthropic", result.valid ? "green" : "red");
+      setDotStatus("status-groq", result.valid ? "green" : "red");
     } catch {
-      setDotStatus("status-anthropic", "red");
+      setDotStatus("status-groq", "red");
     }
   });
 
@@ -400,7 +399,7 @@ export async function openSettings() {
   await loadPreferences();
 
   // Check for first-time setup
-  if (status && !status.env_keys_set.anthropic) {
+  if (status && !status.env_keys_set.groq) {
     enterSetupMode();
   }
 }
@@ -424,7 +423,7 @@ export function isSettingsOpen(): boolean {
 export async function checkFirstTimeSetup(): Promise<boolean> {
   try {
     const status = await apiGet<StatusResponse>("/api/settings/status");
-    if (!status.env_keys_set.anthropic) {
+    if (!status.env_keys_set.groq) {
       openSettings();
       return true;
     }

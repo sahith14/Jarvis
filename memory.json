@@ -1,0 +1,62 @@
+{
+  "name": "Giving You Access Can You Please Do That",
+  "facts": [
+    {
+      "key": "username",
+      "value": "Olga"
+    },
+    {
+      "key": "greeting",
+      "value": "Hello Olga, I'm JARVIS"
+    },
+    {
+      "key": "voice_preference",
+      "value": "female"
+    },
+    {
+      "key": "wake_word",
+      "value": "rice"
+    },
+    {
+      "key": "user_info",
+      "value": "Olga is in AI training"
+    },
+    {
+      "key": "name",
+      "value": "Anoop"
+    },
+    {
+      "key": "screenshot",
+      "value": "saved_screenshot.png"
+    },
+    {
+      "key": "screenshot_preference",
+      "value": "off"
+    },
+    {
+      "key": "camera_access",
+      "value": "granted"
+    },
+    {
+      "key": "brother_name",
+      "value": "Sheku"
+    },
+    {
+      "key": "brother_name_greeting",
+      "value": "Hi Buddhu"
+    },
+    {
+      "key": "mother_name",
+      "value": "Jyoti"
+    },
+    {
+      "key": "user_name",
+      "value": "Mahendra"
+    },
+    {
+      "key": "birthday",
+      "value": "false"
+    }
+  ],
+  "notes": []
+}

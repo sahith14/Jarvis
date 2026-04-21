@@ -5,7 +5,7 @@ import logging
 log = logging.getLogger("jarvis.ai")
 
 # Your Groq API key
-GROQ_API_KEY = "os.getenv("GROQ_API_KEY")"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 _client = None
 

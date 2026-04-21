@@ -1,0 +1,214 @@
+import { createOrb, type OrbState } from "./orb";
+import { createVoiceInput, createAudioPlayer } from "./voice";
+import { createSocket } from "./ws";
+import { openSettings, checkFirstTimeSetup } from "./settings";
+import "./style.css";
+
+const errorLogEl = document.getElementById("error-log")!;
+
+function addErrorToLog(text: string, isFrontend: boolean = false) {
+    const entry = document.createElement("div");
+    entry.className = "log-entry" + (isFrontend ? " frontend" : "");
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    entry.textContent = `[${time}] ${text}`;
+    errorLogEl.prepend(entry); // Newest on top
+    
+    // Keep last 20 errors
+    while (errorLogEl.children.length > 20) {
+        errorLogEl.lastChild?.remove();
+    }
+}
+
+// ── FRONTEND ERROR TRACKING ──
+function reportFrontendError(err: string) {
+    if (socket && socket.send) {
+        socket.send({ type: "frontend_error", text: err });
+    }
+}
+
+window.onerror = (msg, url, line) => {
+    reportFrontendError(`Browser Error: ${msg} at ${url}:${line}`);
+};
+
+window.onunhandledrejection = (event) => {
+    reportFrontendError(`Promise Rejection: ${event.reason}`);
+};
+
+// Capture console.error
+const origConsoleError = console.error;
+console.error = (...args: any[]) => {
+    origConsoleError.apply(console, args);
+    reportFrontendError(`Console Error: ${args.join(" ")}`);
+};
+
+type State = "idle" | "listening" | "thinking" | "speaking";
+let currentState: State = "listening";
+let isMuted = false;
+let isAwake = true; // Always awake
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+let useTextInput = false;
+
+const statusEl = document.getElementById("status-text")!;
+const canvas = document.getElementById("orb-canvas") as HTMLCanvasElement;
+const orb = createOrb(canvas);
+
+const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const WS_URL = `${protocol}//${window.location.host}/ws/voice`;
+const socket = createSocket(WS_URL);
+const audioPlayer = createAudioPlayer();
+orb.setAnalyser(audioPlayer.getAnalyser());
+
+function transition(newState: State) {
+    if (newState === currentState) return;
+    console.log("[state]", currentState, "->", newState);
+    currentState = newState;
+    orb.setState(newState as OrbState);
+    const labels = { idle: "", listening: "listening...", thinking: "thinking...", speaking: "" };
+    statusEl.textContent = labels[newState];
+    
+    if (newState === "speaking") {
+        voiceInput.pause();
+    } else if (newState === "listening" && !isMuted && !useTextInput) {
+        voiceInput.resume();
+    }
+}
+
+function interruptAndListen() {
+    if (currentUtterance) {
+        window.speechSynthesis.cancel();
+        currentUtterance = null;
+    }
+    transition("listening");
+    pendingText = "";
+    if (speechTimeout) clearTimeout(speechTimeout);
+}
+
+function addInterruptButton() {
+    const controls = document.getElementById("controls");
+    if (controls && !document.getElementById("btn-interrupt")) {
+        const btn = document.createElement("button");
+        btn.id = "btn-interrupt";
+        btn.innerHTML = "⏹️";
+        btn.title = "Interrupt JARVIS";
+        btn.style.marginRight = "8px";
+        btn.onclick = (e) => { e.stopPropagation(); interruptAndListen(); };
+        controls.insertBefore(btn, controls.firstChild);
+    }
+}
+
+function handleUserText(text: string) {
+    if (currentState === "speaking") {
+        if (text.toLowerCase().includes("jarvis") || text.toLowerCase().includes("stop")) {
+            interruptAndListen();
+        }
+        return;
+    }
+    
+    // Process everything since we are 24/7
+    if (currentState === "listening" && text.trim()) {
+        // IGNORE text if it sounds like JARVIS just spoke (self-listening filter)
+        if (text.toLowerCase().includes("sir") && text.toLowerCase().includes("detect")) {
+            console.log("[filter] Ignored self-listening");
+            return;
+        }
+
+        if (speechTimeout) clearTimeout(speechTimeout);
+        pendingText += " " + text;
+        speechTimeout = setTimeout(() => {
+            if (pendingText.trim()) {
+                console.log("[send]", pendingText.trim());
+                socket.send({ type: "transcript", text: pendingText.trim(), isFinal: true });
+                transition("thinking");
+                pendingText = "";
+            }
+        }, 500);
+    }
+}
+
+let speechTimeout: any = null;
+let pendingText = "";
+
+const voiceInput = createVoiceInput(
+    (text: string) => handleUserText(text),
+    (errMsg: string) => {
+        console.error("[mic error]", errMsg);
+    }
+);
+
+const captionsEl = document.getElementById("captions")!;
+let captionsTimeout: any = null;
+
+function showCaptions(text: string) {
+    if (captionsTimeout) clearTimeout(captionsTimeout);
+    captionsEl.textContent = text;
+    captionsEl.classList.add("visible");
+    captionsTimeout = setTimeout(() => {
+        captionsEl.classList.remove("visible");
+    }, 6000);
+}
+
+socket.onMessage((msg) => {
+    if (msg.type === "audio" && msg.text) {
+        const text = msg.text as string;
+        
+        // Display captions for everything JARVIS says
+        showCaptions(text);
+
+        // If it's an error alert from JARVIS, add to UI log
+        if (text.includes("Sir, I've detected") || text.includes("Sir, the frontend reported")) {
+            addErrorToLog(text.replace("Sir, ", ""));
+        }
+
+        transition("speaking");
+        currentUtterance = new SpeechSynthesisUtterance(text);
+        currentUtterance.rate = 0.9;
+        currentUtterance.lang = "en-GB";
+        currentUtterance.onend = () => {
+            currentUtterance = null;
+            // Add a 800ms buffer to ensure mic doesn't catch the tail of the speaker
+            setTimeout(() => {
+                transition("listening");
+            }, 800);
+        };
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(currentUtterance);
+    }
+});
+
+setTimeout(() => {
+    voiceInput.start();
+    transition("listening");
+    addInterruptButton();
+    console.log("[ready] 24/7 listening active");
+}, 1000);
+
+document.getElementById("btn-mute")?.addEventListener("click", () => {
+    isMuted = !isMuted;
+    if (isMuted) {
+        voiceInput.pause();
+        transition("idle");
+    } else {
+        voiceInput.resume();
+        transition("listening");
+    }
+});
+
+// Menu dropdown logic
+const menuBtn = document.getElementById("btn-menu");
+const menuDropdown = document.getElementById("menu-dropdown");
+if (menuBtn && menuDropdown) {
+    menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menuDropdown.style.display = menuDropdown.style.display === "none" ? "block" : "none";
+    });
+    document.addEventListener("click", () => {
+        menuDropdown.style.display = "none";
+    });
+}
+
+document.getElementById("btn-settings")?.addEventListener("click", () => {
+    if (menuDropdown) menuDropdown.style.display = "none";
+    openSettings();
+});
+
+setTimeout(() => checkFirstTimeSetup(), 2000);

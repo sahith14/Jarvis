@@ -5,7 +5,7 @@ import logging
 log = logging.getLogger("jarvis.tts")
 
 # Your ElevenLabs API key
-ELEVENLABS_API_KEY = "sk_b8f999e29695933b41a423c708e3d0ebd007a4b4a97d9a42"
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")  # Replace with your key
 ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
 
 async def synthesize_speech(text: str) -> bytes | None:
