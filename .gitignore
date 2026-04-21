@@ -1,41 +1,11 @@
-# Environment
-.env
-.env.local
-
-# Dependencies
-node_modules/
-.venv/
-venv/
-
-# Python
-__pycache__/
+﻿__pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
+.env
+venv/
+node_modules/
 
-# Data (user-specific, generated at runtime)
+# Chrome / WhatsApp garbage
+whatsapp_data/
 *.db
-data/*.jsonl
-data/active_session.json
-data/.jarvis_output.txt
-
-# Certificates
-*.pem
-
-# Build
-dist/
-.vite/
-frontend/.vite/
-
-# IDE / System
-.DS_Store
-.vscode/
-.idea/
-.claude/
-.arch/
-
-# Desktop overlay
-desktop-overlay/node_modules/
-context/
-*.db-shm
-*.db-wal
+*.wal
+*.journal
